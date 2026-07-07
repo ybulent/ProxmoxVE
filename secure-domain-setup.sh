@@ -46,19 +46,27 @@ else
 fi
 
 # ---- 2. config.js: anonymousdomain ----------------------------------------
+# NOTE: the default config ships a COMMENTED "// anonymousdomain: 'guest.example.com'"
+# line, so we must check for an ACTIVE (non-commented) entry, not just the word.
 echo ">> [2/4] config.js anonymousdomain"
-if grep -q "anonymousdomain" "$CONFIG"; then
+if grep -qE '^[[:space:]]*anonymousdomain:' "$CONFIG"; then
   echo "   already present"
 else
   cp "$CONFIG" "$CONFIG.sbak"
-  awk -v host="$FQDN" -v guest="$GUEST" '
-    { print }
-    index($0, "domain: \047" host "\047") && !d && index($0,"anonymousdomain")==0 {
-      print "        anonymousdomain: \047" guest "\047,"
-      d=1
-    }
-  ' "$CONFIG.sbak" >"$CONFIG"
-  grep -q "anonymousdomain" "$CONFIG" && echo "   added" || { echo "!! insert failed, reverting"; cp "$CONFIG.sbak" "$CONFIG"; }
+  if grep -qE '^[[:space:]]*//[[:space:]]*anonymousdomain:' "$CONFIG"; then
+    # uncomment the shipped template line and point it at our guest domain
+    sed -i "s|//[[:space:]]*anonymousdomain:[[:space:]]*'[^']*',|anonymousdomain: '${GUEST}',|" "$CONFIG"
+  else
+    # otherwise insert a fresh active line right after the domain line
+    awk -v host="$FQDN" -v guest="$GUEST" '
+      { print }
+      index($0, "domain: \047" host "\047") && !d && index($0,"anonymousdomain")==0 {
+        print "        anonymousdomain: \047" guest "\047,"
+        d=1
+      }
+    ' "$CONFIG.sbak" >"$CONFIG"
+  fi
+  grep -qE '^[[:space:]]*anonymousdomain:' "$CONFIG" && echo "   activated" || { echo "!! failed, reverting"; cp "$CONFIG.sbak" "$CONFIG"; }
 fi
 
 # ---- 3. jicofo.conf: authentication block ---------------------------------
