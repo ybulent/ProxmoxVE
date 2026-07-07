@@ -103,6 +103,25 @@ $STD apt install -y jitsi-meet
 unset DEBIAN_FRONTEND
 msg_ok "Installed Jitsi Meet"
 
+msg_info "Ensuring nginx web vhost"
+# The jitsi-meet-web-config postinst sometimes skips creating the nginx vhost
+# under a non-interactive install, which leaves nothing listening on 443.
+# Instantiate it from the shipped template if it is missing.
+if [[ ! -e "/etc/nginx/sites-enabled/${JITSI_FQDN}.conf" ]]; then
+  if [[ ! -s "/etc/jitsi/meet/${JITSI_FQDN}.crt" ]]; then
+    openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+      -keyout "/etc/jitsi/meet/${JITSI_FQDN}.key" \
+      -out "/etc/jitsi/meet/${JITSI_FQDN}.crt" -subj "/CN=${JITSI_FQDN}" 2>/dev/null
+  fi
+  if [[ -f /usr/share/jitsi-meet-web-config/jitsi-meet.example ]]; then
+    cp /usr/share/jitsi-meet-web-config/jitsi-meet.example "/etc/nginx/sites-available/${JITSI_FQDN}.conf"
+    sed -i "s/jitsi-meet\.example\.com/${JITSI_FQDN}/g" "/etc/nginx/sites-available/${JITSI_FQDN}.conf"
+    ln -sf "/etc/nginx/sites-available/${JITSI_FQDN}.conf" "/etc/nginx/sites-enabled/${JITSI_FQDN}.conf"
+    nginx -t 2>/dev/null && systemctl reload nginx
+  fi
+fi
+msg_ok "Ensured nginx web vhost (443 listening)"
+
 msg_info "Configuring Videobridge for direct UDP media"
 # The browser reaches the videobridge directly at <public-ip>:10000/udp, so JVB
 # must advertise the public address in its ICE candidates.
